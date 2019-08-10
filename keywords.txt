@@ -1,0 +1,10 @@
+gnhast	KEYWORD1
+set_server	KEYWORD2
+connect		KEYWORD2
+disconnect	KEYWORD2
+imalive		KEYWORD2
+generic_build_device	KEYWORD2
+find_dev_byuid		KEYWORD2
+store_data_dev		KEYWORD2
+gn_register_device	KEYWORD2
+gn_update_device	KEYWORD2
