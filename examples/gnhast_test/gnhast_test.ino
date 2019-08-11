@@ -33,7 +33,7 @@ void setup() {
     fake_sensor = gnhast.generic_build_device("ESP_faker1", "Fake ESP device",
 					      PROTO_SENSOR, DEVICE_SENSOR,
 					      SUBTYPE_NUMBER, DATATYPE_UINT,
-					      NULL);
+					      0, NULL);
     if (fake_sensor < 0) {
 	Serial.println("Out of devices!!");
 	delay(5000);

@@ -47,9 +47,11 @@ typedef struct _gn_dev {
     int subtype;
     int proto;
     int datatype; /* store the datatype here */
+    int scale; /* set scale type here */
     gn_data_t data;
     void *arg; /* pointer that can be used by program, not needed */
 } gn_dev_t;
+
 /* Change this if you need more than 10 things. that seems like alot */
 #define gn_MAX_DEVICES 10
 
@@ -61,7 +63,7 @@ class gnhast {
     bool connect();
     void disconnect();
     void imalive();
-    int generic_build_device(char *uid, char *name, int proto, int type, int subtype, int datatype, void *arg);
+    int generic_build_device(char *uid, char *name, int proto, int type, int subtype, int datatype, int scale, void *arg);
     int find_dev_byuid(char *uid);
     void store_data_dev(int dev, gn_data_t data);
     void gn_register_device(int dev);

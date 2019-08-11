@@ -43,6 +43,7 @@ gnhast::gnhast(char *coll_name, int instance) {
 	_devices[i].type = 0;
 	_devices[i].subtype = 0;
 	_devices[i].proto = 0;
+	_devices[i].scale = 0;
 	_devices[i].arg = NULL;
 	_devices[i].datatype = 0;
 	_devices[i].data.u = 0;
@@ -131,7 +132,7 @@ void gnhast::imalive()
 
 int gnhast::generic_build_device(char *uid, char *name,
 				 int proto, int type, int subtype,
-				 int datatype, void *arg)
+				 int datatype, int scale, void *arg)
 {
     int i;
 
@@ -155,6 +156,7 @@ int gnhast::generic_build_device(char *uid, char *name,
     _devices[i].proto = proto;
     _devices[i].subtype = subtype;
     _devices[i].datatype = datatype;
+    _devices[i].scale = scale;
     _devices[i].arg = arg;
 
     _nrofdevs++;
@@ -214,9 +216,10 @@ void gnhast::gn_register_device(int dev)
     if (_debug)
 	Serial.println("Registering a device");
 
-    sprintf(buf, "reg uid:%s name:\"%s\" devt:%d subt:%d proto:%d",
+    sprintf(buf, "reg uid:%s name:\"%s\" devt:%d subt:%d proto:%d scale:%d",
 	    _devices[dev].uid, _devices[dev].name,
-	    _devices[dev].type, _devices[dev].subtype, _devices[dev].proto);
+	    _devices[dev].type, _devices[dev].subtype,
+	    _devices[dev].proto, _devices[dev].scale);
 
     if (_debug)
 	Serial.println(buf);
