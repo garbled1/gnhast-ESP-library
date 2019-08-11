@@ -35,6 +35,7 @@ gnhast::gnhast(char *coll_name, int instance) {
     _keep_connection = 0;
     _instance = instance;
     _nrofdevs = 0;
+    _debug = GNHAST_DEBUG;
     /* zero fill the device table */
     for (i=0; i < gn_MAX_DEVICES; i++) {
 	_devices[i].uid = NULL;
@@ -46,6 +47,18 @@ gnhast::gnhast(char *coll_name, int instance) {
 	_devices[i].datatype = 0;
 	_devices[i].data.u = 0;
     }
+}
+
+/*!
+ * @brief Set debug mode
+ */
+void gnhast::set_debug_mode(int mode)
+{
+    _debug = mode;
+    if (_debug)
+	Serial.println("Turned debug mode ON");
+    else
+	Serial.println("Turned debug mode OFF");
 }
 
 /*!
@@ -83,21 +96,38 @@ bool gnhast::connect()
     return true;
 }
 
+/*!
+ * @brief Disconnect from gnhast nicely
+ */
+
 void gnhast::disconnect()
 {
-    Serial.println("Requesting disconnect from gnhastd");
+    if (_debug)
+	Serial.println("Requesting disconnect from gnhastd");
     if (_client.connected()) {
 	_client.println("disconnect");
 	_client.stop();
     }
 }
 
+/*!
+ * @brief Tell gnhast we are still alive
+ */
+
 void gnhast::imalive()
 {
-    Serial.println("Telling gnhast we are alive");
+    if (_debug)
+	Serial.println("Telling gnhast we are alive");
     if (_client.connected())
 	_client.println("imalive");
 }
+
+/*!
+ * @brief build a device that can later be registered.
+ * Unlike normal gnhast, we just have an integer array of devices, to keep
+ * it simple and small.  Also, the device definitions are greatly reduced, for
+ * simplicity.
+ */
 
 int gnhast::generic_build_device(char *uid, char *name,
 				 int proto, int type, int subtype,
@@ -105,8 +135,10 @@ int gnhast::generic_build_device(char *uid, char *name,
 {
     int i;
 
-    Serial.print("Creating device #");
-    Serial.println(i);
+    if (_debug) {
+	Serial.print("Creating device #");
+	Serial.println(i);
+    }
     i = _nrofdevs;
     if (i == gn_MAX_DEVICES) {
 	Serial.println("Too many devices in generic_build_device, increase gn_MAX_DEVICES and rebuild");
@@ -129,6 +161,10 @@ int gnhast::generic_build_device(char *uid, char *name,
     return i;
 }
 
+/*!
+ * @brief Find a device by it's uid.  linear search.  only 10 devices, so, ok.
+ */
+
 int gnhast::find_dev_byuid(char *uid)
 {
     int i;
@@ -138,6 +174,10 @@ int gnhast::find_dev_byuid(char *uid)
 	    return i;
     return -1;
 }
+
+/*!
+ * @brief store a datapoint in a device for later upd
+ */
 
 void gnhast::store_data_dev(int dev, gn_data_t data)
 {
@@ -153,6 +193,10 @@ void gnhast::store_data_dev(int dev, gn_data_t data)
     }
 }
 
+/*!
+ * @brief register a device with gnhast
+ */
+
 void gnhast::gn_register_device(int dev)
 {
     char buf[1024];
@@ -167,11 +211,15 @@ void gnhast::gn_register_device(int dev)
 	return;
     }
 
-    Serial.println("Registering a device");
+    if (_debug)
+	Serial.println("Registering a device");
+
     sprintf(buf, "reg uid:%s name:\"%s\" devt:%d subt:%d proto:%d",
 	    _devices[dev].uid, _devices[dev].name,
 	    _devices[dev].type, _devices[dev].subtype, _devices[dev].proto);
-    Serial.println(buf);
+
+    if (_debug)
+	Serial.println(buf);
     
     if (!_client.connected()) {
 	if (!connect()) {
@@ -182,6 +230,10 @@ void gnhast::gn_register_device(int dev)
     _client.println(buf);
     return;
 }
+
+/*!
+ * @brief update the infor for a device, specifically the data.
+ */
 
 void gnhast::gn_update_device(int dev)
 {
@@ -197,7 +249,8 @@ void gnhast::gn_update_device(int dev)
 	return;
     }
 
-    Serial.println("Doing an update");
+    if (_debug)
+	Serial.println("Doing an update");
     
     switch (_devices[dev].datatype) {
     case DATATYPE_UINT:
@@ -225,7 +278,8 @@ void gnhast::gn_update_device(int dev)
 		_devices[dev].data.u64);
 	break;
     }
-    Serial.println(buf);
+    if (_debug)
+	Serial.println(buf);
 
     if (!_client.connected()) {
 	if (!connect()) {
