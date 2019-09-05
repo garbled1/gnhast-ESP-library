@@ -19,7 +19,7 @@
  */
 
 #include "Arduino.h"
-#include "gnhast.h"
+#include "gnhast_async.h"
 
 /*!
  * @brief Instantiates a new gnhast class
@@ -28,7 +28,8 @@
 */
 gnhast::gnhast(char *coll_name, int instance) {
     int i;
-    
+
+    _collector_is_healthy = 1;
     _server = "gnhastd";
     _port = 2920;
     _collector_name = coll_name;
@@ -48,6 +49,20 @@ gnhast::gnhast(char *coll_name, int instance) {
 	_devices[i].datatype = 0;
 	_devices[i].data.u = 0;
     }
+    AsyncClient *client = NULL;
+    AsyncPrinter *ap = NULL;
+    DNSServer dns;
+    strncpy(_gnhast_server, GNHAST_SERVER_HOST, 80);
+    strncpy(_gnhast_port_str, "2920", 8);
+    shouldSaveConfig = true;
+}
+
+/*!
+ * @brief: Set the health status
+ */
+void gnhast::set_collector_health(int health)
+{
+    _collector_is_healthy = health;
 }
 
 /*!
@@ -63,6 +78,14 @@ void gnhast::set_debug_mode(int mode)
 }
 
 /*!
+ * @brief check for debug mode
+ */
+int gnhast::is_debug()
+{
+    return(_debug);
+}
+
+/*!
  * @brief Set server and port
  */
 
@@ -72,42 +95,43 @@ void gnhast::set_server(char *server, int port)
     _port = port;
 }
 
-/*!
- * @brief Connect to gnhastd, initiate collector
+/*
+ * simpler set server, sets it from wifi config stuff
  */
 
-bool gnhast::connect()
+void gnhast::init_server()
 {
-    char buf[256];
-    
-    Serial.print("Connecting to: ");
-    Serial.print(_server);
-    Serial.print(":");
-    Serial.println(_port);
-
-    if (!_client.connect(_server, _port)) {
-	Serial.println("Connection failed!");
-	delay(1000);
-	return false;
-    }
-    sprintf(buf, "client client:%s-%0.3d", _collector_name, _instance);
-    if (_client.connected()) {
-	_client.println(buf);
-    }
-    return true;
+    _server = strdup(_gnhast_server);
 }
 
-/*!
- * @brief Disconnect from gnhast nicely
+/*
+ * Just tell gnhast about our collector name
  */
 
-void gnhast::disconnect()
+void gnhast::__gn_client()
 {
-    if (_debug)
-	Serial.println("Requesting disconnect from gnhastd");
-    if (_client.connected()) {
-	_client.println("disconnect");
-	_client.stop();
+    ap->printf("client client:%s-%0.3d\n", _collector_name, _instance);
+}
+
+/*
+ * Barebones (for now) reply handler.  Ignores everything other than ping
+ */
+
+void gnhast::__gn_gotdata(void *arg, AsyncPrinter *pri, uint8_t *data,
+			  size_t len)
+{
+    Serial.println("In gn_gotdata");
+    if (_debug) {
+    	Serial.printf("Got data len=%d\n", (int)len);
+    	Serial.write((uint8_t *)data, len);
+    }
+
+    if (len >= 4) {
+    	if (strncmp("ping", (char *)data, 4) == 0) {
+    	    Serial.printf("Got ping\n");
+    	    if (_collector_is_healthy)
+    		imalive();
+    	}
     }
 }
 
@@ -119,8 +143,66 @@ void gnhast::imalive()
 {
     if (_debug)
 	Serial.println("Telling gnhast we are alive");
-    if (_client.connected())
-	_client.println("imalive");
+    if (ap->connected())
+	ap->printf("imalive\n");
+}
+
+/*!
+ * @brief Connect to gnhastd, initiate collector
+ */
+
+bool gnhast::connect()
+{
+    int i;
+    Serial.printf("Connecting to: %s:%d\n", _server, _port);
+
+    if (!client) {
+	if (_debug)
+	    Serial.println("Allocating new client.");
+	client = new AsyncClient();
+    }
+    if (!client) {
+	Serial.println("Could not allocate client!");
+	return false;
+    }
+
+    /* setup the AsyncPrinter lib */
+    if (!ap) {
+	if (_debug)
+	    Serial.println("Allocating new AsyncPrinter");
+	ap = new AsyncPrinter(client);
+	
+	ap->onData(std::bind(&gnhast::__gn_gotdata, this,
+			     std::placeholders::_1,
+			     std::placeholders::_2,
+			     std::placeholders::_3,
+			     std::placeholders::_4), client);
+    }
+
+    if (!ap->connected()) {
+	if (!ap->connect(_server, _port)) {
+	    Serial.println("Connection to gnhastd failed!");
+	    return false;
+	}
+    }
+    __gn_client();
+    ap->printf("getapiv\n");
+    
+    return true;
+}
+
+/*!
+ * @brief Disconnect from gnhast nicely
+ */
+
+void gnhast::disconnect()
+{
+    if (_debug)
+	Serial.println("Requesting disconnect from gnhastd");
+    if (ap->connected()) {
+	ap->printf("disconnect\n");
+	ap->close();
+    }
 }
 
 /*!
@@ -178,6 +260,18 @@ int gnhast::find_dev_byuid(char *uid)
 }
 
 /*!
+ * @brief Get a device by index #
+ * Returns NULL if device is not allocated
+ */
+
+gn_dev_t *gnhast::get_dev_byindex(int idx)
+{
+    if (_devices[idx].uid == NULL)
+	return(NULL);
+    return(&_devices[idx]);
+}
+
+/*!
  * @brief store a datapoint in a device for later upd
  */
 
@@ -201,8 +295,6 @@ void gnhast::store_data_dev(int dev, gn_data_t data)
 
 void gnhast::gn_register_device(int dev)
 {
-    char buf[1024];
-
     /* Sanity verification */
     if (NULL == _devices[dev].name || NULL == _devices[dev].uid ||
 	_devices[dev].type == 0 || _devices[dev].proto == 0 ||
@@ -213,24 +305,27 @@ void gnhast::gn_register_device(int dev)
 	return;
     }
 
-    if (_debug)
+    if (_debug) {
 	Serial.println("Registering a device");
-
-    sprintf(buf, "reg uid:%s name:\"%s\" devt:%d subt:%d proto:%d scale:%d",
-	    _devices[dev].uid, _devices[dev].name,
-	    _devices[dev].type, _devices[dev].subtype,
-	    _devices[dev].proto, _devices[dev].scale);
-
-    if (_debug)
-	Serial.println(buf);
-    
-    if (!_client.connected()) {
+	Serial.printf("reg uid:%s name:\"%s\" devt:%d subt:%d "
+		      "proto:%d scale:%d\n",
+		      _devices[dev].uid, _devices[dev].name,
+		      _devices[dev].type, _devices[dev].subtype,
+		      _devices[dev].proto, _devices[dev].scale);
+    }
+ 
+    if (!ap->connected()) {
+	Serial.println("Not connected in reg??");
 	if (!connect()) {
 	    Serial.println("register cannot connect to gnhastd!");
 	    return;
 	}
     }
-    _client.println(buf);
+    ap->printf("reg uid:%s name:\"%s\" devt:%d subt:%d proto:%d scale:%d\n",
+	       _devices[dev].uid, _devices[dev].name,
+	       _devices[dev].type, _devices[dev].subtype,
+	       _devices[dev].proto, _devices[dev].scale);
+
     return;
 }
 
@@ -284,12 +379,13 @@ void gnhast::gn_update_device(int dev)
     if (_debug)
 	Serial.println(buf);
 
-    if (!_client.connected()) {
+    if (!ap->connected()) {
+	Serial.println("not connected in upd");
 	if (!connect()) {
 	    Serial.println("update cannot connect to gnhastd!");
 	    return;
 	}
     }
-    _client.println(buf);
+    ap->printf("%s\n", buf);
     return;
 }
