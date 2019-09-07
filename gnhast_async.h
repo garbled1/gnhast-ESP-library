@@ -102,6 +102,7 @@ class gnhast {
     int generic_build_device(char *uid, char *name, int proto, int type, int subtype, int datatype, int scale, void *arg);
     int find_dev_byuid(char *uid);
     void store_data_dev(int dev, gn_data_t data);
+    void gn_mod_name(int dev);
     void gn_register_device(int dev);
     void gn_update_device(int dev);
     void set_debug_mode(int mode);

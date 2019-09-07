@@ -1,5 +1,5 @@
-# gnhast-android-library
-A basic collector library for android
+# gnhast-ESP-library
+A basic collector library for ESP8266
 
 ## Notes on this library
 
@@ -21,3 +21,9 @@ A basic collector library for android
   
 * See more protocol docs here: https://codedocs.xyz/garbled1/gnhast/
 * And here: https://garbled1.github.io/gnhast/
+
+## Requires the following libraries
+* ArduinoJson (v6)
+* ESPAsyncTCP
+* ESPAsyncWebServer
+* ESPAsyncWiFiManager

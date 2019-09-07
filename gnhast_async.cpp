@@ -289,6 +289,41 @@ void gnhast::store_data_dev(int dev, gn_data_t data)
     }
 }
 
+/*
+ * Shortcut to modify a device name
+ */
+
+void gnhast::gn_mod_name(int dev)
+{
+    char mod[256];
+
+    /* Sanity verification */
+    if (NULL == _devices[dev].name || NULL == _devices[dev].uid ||
+	_devices[dev].type == 0 || _devices[dev].proto == 0 ||
+	_devices[dev].subtype == 0) {
+	Serial.print("Device #");
+	Serial.print(dev);
+	Serial.println(" is badly formed, cannot modify");
+	return;
+    }
+
+    sprintf(mod, "mod uid:%s name:\"%s\"\n", _devices[dev].uid,
+	    _devices[dev].name);
+
+    if (_debug)
+	Serial.printf("Modify device:\n%s", mod);
+    if (!ap->connected()) {
+	Serial.println("Not connected in mod_name??");
+	if (!connect()) {
+	    Serial.println("mod_name cannot connect to gnhastd!");
+	    return;
+	}
+    }
+    ap->printf("%s", mod);
+    return;
+}
+
+
 /*!
  * @brief register a device with gnhast
  */
