@@ -27,3 +27,8 @@ A basic collector library for ESP8266
 * ESPAsyncTCP
 * ESPAsyncWebServer
 * ESPAsyncWiFiManager
+
+## Warning:
+Due to what appears to be a bug in the AsyncPrinter library, you cannot send
+too much data at once.  For example, calling gnhast.gn_update_device()
+repeatedly in a loop seems to crash it.  Not sure when this will be fixed.
