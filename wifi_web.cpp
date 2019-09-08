@@ -54,6 +54,8 @@ void gnhast::saveConfigCallback()
 
 void gnhast::init_wifi()
 {
+    char ap_name[32];
+
     /* Things that we will ask the user for */
     AsyncWiFiManagerParameter custom_gnhast_server("gn_server", "Gnhast Server",
 						   _gnhast_server, 79);
@@ -62,6 +64,7 @@ void gnhast::init_wifi()
 
     server = new AsyncWebServer(80);
     AsyncWiFiManager wifiManager(server, &dns);
+    wifimgr = &wifiManager;
 
     /* read our config file */
     _read_settings_conf();
@@ -79,7 +82,10 @@ void gnhast::init_wifi()
 
     /* If we have a configured SSID/etc, it will connect, otherwise, start
        an AP */
-    if (!wifiManager.autoConnect(AP_NAME, AP_PASSWORD)) {
+
+    snprintf(ap_name, 32, "%s-%d", AP_NAME, ESP.getChipId());
+    
+    if (!wifiManager.autoConnect(ap_name, AP_PASSWORD)) {
 	Serial.println("Failed to connect and hit timeout");
 	delay(6000);
 	ESP.reset(); /* woo, that's harsh */
@@ -153,9 +159,70 @@ void gnhast::handleDoUpdate(AsyncWebServerRequest *request,
 	} else {
 	    Serial.println("Update complete");
 	    Serial.flush();
-	    ESP.restart();
+	    shouldReboot = true;
 	}
     }
+}
+
+/*
+ * Handle a reboot request
+ */
+
+void gnhast::handle_reboot(AsyncWebServerRequest *request)
+{
+    AsyncWebServerResponse *response = request->beginResponse(302, "text/plain", "Please wait while the device reboots");
+
+    response->addHeader("Refresh", "3");
+    response->addHeader("Location", "/");
+    request->send(response);
+
+    Serial.println("Reboot Requested");
+    Serial.flush();
+    shouldReboot = true;
+}
+
+/*
+ * Handle a modify config request
+ */
+
+void gnhast::handle_modcfg(AsyncWebServerRequest *request)
+{
+    AsyncWebParameter *devname, *uid;
+    char *fail = "<p>Data failure</p><br><a href=\"/\">Back to main Page</a>";
+    char *done = "<p>Update complete</p><br><a href=\"/\">Back to main Page</a>";
+    gn_dev_t *dev;
+    int devidx;
+
+    Serial.println("Got modcfg");
+
+    if (request->hasParam("chgdevname", true))
+	devname = request->getParam("chgdevname", true);
+    else {
+	request->send(200, "text/html", fail);
+	return;
+    }
+    if (request->hasParam("uid", true)) {
+	uid = request->getParam("uid", true);
+	devidx = find_dev_byuid((char *)uid->value().c_str());
+	if (devidx == -1) {
+	    request->send(200, "text/html", "<p>Incorrect UID</p>");
+	    return;
+	}
+	dev = get_dev_byindex(devidx);
+	dev->name = strdup(devname->value().c_str());
+    } else {
+	request->send(200, "text/html", fail);
+	return;
+    }
+
+    Serial.printf("modcfg got name='%s' uid='%s'\n", devname->value().c_str(),
+		  uid->value().c_str());
+    save_gnhast_config();
+
+    /* tell gnhastd our new name */
+    gn_mod_name(devidx);
+
+    request->send(200, "text/html", done);
 }
 
 /* File type handler */
@@ -189,6 +256,23 @@ boolean gnhast::init_webserver()
 	      [this](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data,
 		 size_t len, bool final) {handleDoUpdate(request, filename, index, data, len, final);}
   );
+    server->on("/modcfg", HTTP_POST, [this](AsyncWebServerRequest *request){handle_modcfg(request);});
+
+    server->on("/reboot_coll", HTTP_GET, [this](AsyncWebServerRequest *request){handle_reboot(request);});
+
+    server->on("/reconfig", HTTP_GET, [this](AsyncWebServerRequest *request)
+	       {
+		   Serial.println("Resetting WiFi");
+		   if (wifimgr != NULL) {
+		       shouldReboot = true;
+		       wifimgr->resetSettings();
+		   }
+		   AsyncWebServerResponse *response = request->beginResponse(302, "text/plain", "Please wait while the device resets");
+		   response->addHeader("Refresh", "1");
+		   response->addHeader("Location", "/");
+		   request->send(response);
+	       });
+
     server->onNotFound([this](AsyncWebServerRequest *request) {
 	    String ct = getContentType(request->url());
 	    if (SPIFFS.exists(request->url()))

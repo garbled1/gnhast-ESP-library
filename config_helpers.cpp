@@ -44,3 +44,48 @@ DynamicJsonDocument gnhast::parse_json_conf(char *filename)
     }
     return(json_doc);
 }
+
+/*
+ * Parse the gnhast config
+ */
+
+DynamicJsonDocument gnhast::read_gnhast_config()
+{
+    DynamicJsonDocument doc = parse_json_conf("/gnhast.json");
+ 
+    return(doc);
+}
+
+/*
+ * Save gnhast config
+ */
+void gnhast::save_gnhast_config()
+{
+    DynamicJsonDocument json_doc(JSON_CONFIG_FILE_SIZE);
+    gn_dev_t *dev;
+    int i;
+	
+    Serial.println("saving gnhast config");
+
+    for (i=0; i < gn_MAX_DEVICES; i++) {
+	dev = get_dev_byindex(i);
+	if (dev == NULL)
+	    continue;
+	json_doc[dev->uid]["name"] = dev->name;
+    }
+
+    json_doc["collector_name"] = _collector_name;
+    json_doc["instance"] = _instance;
+    
+    File configFile = SPIFFS.open("/gnhast.json", "w");
+    if (!configFile) {
+	Serial.println("failed to open gnhast config file for writing");
+    }
+
+    if (is_debug()) {
+	serializeJson(json_doc, Serial);
+	Serial.println();
+    }
+    serializeJson(json_doc, configFile);
+    configFile.close();
+}

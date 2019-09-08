@@ -88,8 +88,8 @@ typedef struct _gn_dev {
     void *arg; /* pointer that can be used by program, not needed */
 } gn_dev_t;
 
-/* Change this if you need more than 10 things. that seems like alot */
-#define gn_MAX_DEVICES 10
+/* Change this if you need more than 20 things. that seems like alot */
+#define gn_MAX_DEVICES 20
 
 class gnhast {
  public:
@@ -110,9 +110,12 @@ class gnhast {
     void set_collector_health(int health);
     int is_debug();
     gn_dev_t *get_dev_byindex(int idx);
+    bool shouldReboot;
 
     /* config_helper.cpp */
     DynamicJsonDocument parse_json_conf(char *filename);
+    void save_gnhast_config();
+    DynamicJsonDocument read_gnhast_config();
 
     /* wifi_web.cpp */
     void init_wifi();
@@ -150,6 +153,7 @@ class gnhast {
 
     AsyncClient *client;
     DNSServer dns;
+    AsyncWiFiManager *wifimgr;
 
     void __gn_client();
     void __gn_gotdata(void *arg, AsyncPrinter *pri, uint8_t *data, size_t len);
@@ -162,6 +166,8 @@ class gnhast {
 			const String& filename,
 			size_t index, uint8_t *data, size_t len, bool final);
     void handleUpdate(AsyncWebServerRequest *request);
+    void handle_modcfg(AsyncWebServerRequest *request);
+    void handle_reboot(AsyncWebServerRequest *request);
 };
     
 #endif /*__gnhast_async_h__*/

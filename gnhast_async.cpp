@@ -37,6 +37,7 @@ gnhast::gnhast(char *coll_name, int instance) {
     _instance = instance;
     _nrofdevs = 0;
     _debug = GNHAST_DEBUG;
+    shouldReboot = false;
     /* zero fill the device table */
     for (i=0; i < gn_MAX_DEVICES; i++) {
 	_devices[i].uid = NULL;
@@ -55,6 +56,7 @@ gnhast::gnhast(char *coll_name, int instance) {
     strncpy(_gnhast_server, GNHAST_SERVER_HOST, 80);
     strncpy(_gnhast_port_str, "2920", 8);
     shouldSaveConfig = true;
+    wifimgr = NULL;
 }
 
 /*!
@@ -120,7 +122,6 @@ void gnhast::__gn_client()
 void gnhast::__gn_gotdata(void *arg, AsyncPrinter *pri, uint8_t *data,
 			  size_t len)
 {
-    Serial.println("In gn_gotdata");
     if (_debug) {
     	Serial.printf("Got data len=%d\n", (int)len);
     	Serial.write((uint8_t *)data, len);
@@ -128,7 +129,8 @@ void gnhast::__gn_gotdata(void *arg, AsyncPrinter *pri, uint8_t *data,
 
     if (len >= 4) {
     	if (strncmp("ping", (char *)data, 4) == 0) {
-    	    Serial.printf("Got ping\n");
+	    if (_debug)
+		Serial.printf("Got ping\n");
     	    if (_collector_is_healthy)
     		imalive();
     	}
@@ -356,7 +358,8 @@ void gnhast::gn_register_device(int dev)
 	    return;
 	}
     }
-    ap->printf("reg uid:%s name:\"%s\" devt:%d subt:%d proto:%d scale:%d\n",
+    ap->printf("reg uid:%s name:\"%s\" devt:%d subt:%d proto:%d"
+	       " scale:%d\n",
 	       _devices[dev].uid, _devices[dev].name,
 	       _devices[dev].type, _devices[dev].subtype,
 	       _devices[dev].proto, _devices[dev].scale);
@@ -384,35 +387,6 @@ void gnhast::gn_update_device(int dev)
 
     if (_debug)
 	Serial.println("Doing an update");
-    
-    switch (_devices[dev].datatype) {
-    case DATATYPE_UINT:
-	sprintf(buf, "upd uid:%s %s:%d",
-		_devices[dev].uid,
-		_dev_argtable[_devices[dev].subtype],
-		_devices[dev].data.u);
-	break;
-    case DATATYPE_DOUBLE:
-	if (_devices[dev].type == DEVICE_DIMMER) {
-	    sprintf(buf, "upd uid:%s dimmer:%f",
-		_devices[dev].uid,
-		_devices[dev].data.d);
-	} else {
-	    sprintf(buf, "upd uid:%s %s:%f",
-		    _devices[dev].uid,
-		    _dev_argtable[_devices[dev].subtype],
-		    _devices[dev].data.d);
-	}
-	break;
-    case DATATYPE_LL:
-	sprintf(buf, "upd uid:%s %s:%jd",
-		_devices[dev].uid,
-		_dev_argtable[_devices[dev].subtype],
-		_devices[dev].data.u64);
-	break;
-    }
-    if (_debug)
-	Serial.println(buf);
 
     if (!ap->connected()) {
 	Serial.println("not connected in upd");
@@ -421,6 +395,36 @@ void gnhast::gn_update_device(int dev)
 	    return;
 	}
     }
+    
+    switch (_devices[dev].datatype) {
+    case DATATYPE_UINT:
+	sprintf(buf, "upd uid:%s %s:%d\n",
+		_devices[dev].uid,
+		_dev_argtable[_devices[dev].subtype],
+		_devices[dev].data.u);
+	break;
+    case DATATYPE_DOUBLE:
+	if (_devices[dev].type == DEVICE_DIMMER) {
+	    sprintf(buf, "upd uid:%s dimmer:%f\n",
+		_devices[dev].uid,
+		_devices[dev].data.d);
+	} else {
+	    sprintf(buf, "upd uid:%s %s:%f\n",
+		    _devices[dev].uid,
+		    _dev_argtable[_devices[dev].subtype],
+		    _devices[dev].data.d);
+	}
+	break;
+    case DATATYPE_LL:
+	sprintf(buf, "upd uid:%s %s:%jd\n",
+		_devices[dev].uid,
+		_dev_argtable[_devices[dev].subtype],
+		_devices[dev].data.u64);
+	break;
+    }
+    if (_debug)
+	Serial.println(buf);
+
     ap->printf("%s\n", buf);
     return;
 }
